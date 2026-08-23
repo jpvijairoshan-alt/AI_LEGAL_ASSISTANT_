@@ -1,0 +1,151 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum CaseStatus {
+  ACTIVE
+  DISPOSED
+  PENDING
+}
+
+enum CourtType {
+  HIGH_COURT
+  DISTRICT_COURT
+  SUPREME_COURT
+  TRIBUNAL
+  SESSIONS_COURT
+  MAGISTRATE_COURT
+}
+
+enum CaseStage {
+  FIR_STAGE
+  INVESTIGATION
+  CHARGE_SHEET
+  TRIAL
+  ARGUMENTS
+  CROSS_EXAMINATION
+  JUDGMENT
+  BAIL
+  APPEAL
+  MISC
+}
+
+enum EvidenceType {
+  AUDIO
+  VIDEO
+  PDF
+  IMAGE
+  DOCUMENT
+}
+
+enum HearingStatus {
+  SCHEDULED
+  COMPLETED
+  POSTPONED
+  CANCELLED
+}
+
+model Lawyer {
+  id              String    @id @default(cuid())
+  fullName        String    @map("full_name")
+  email           String    @unique
+  password        String
+  barCouncilNo    String    @unique @map("bar_council_no")
+  phone           String?
+  specialization  String?
+  profileImage    String?   @map("profile_image")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  cases           Case[]
+  hearings        Hearing[]
+
+  @@map("lawyers")
+}
+
+model Case {
+  id              String    @id @default(cuid())
+  caseNumber      String    @unique @map("case_number")
+  title           String
+  clientName      String    @map("client_name")
+  clientPhone     String?   @map("client_phone")
+  clientEmail     String?   @map("client_email")
+  courtName       String    @map("court_name")
+  courtType       CourtType @default(DISTRICT_COURT) @map("court_type")
+  judgeName       String?   @map("judge_name")
+  opposingCounsel String?   @map("opposing_counsel")
+  stage           CaseStage @default(FIR_STAGE)
+  status          CaseStatus @default(ACTIVE)
+  description     String?
+  nextHearingDate DateTime? @map("next_hearing_date")
+  filingDate      DateTime? @map("filing_date")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  lawyer          Lawyer    @relation(fields: [lawyerId], references: [id], onDelete: Cascade)
+  lawyerId        String    @map("lawyer_id")
+
+  evidence        Evidence[]
+  hearings        Hearing[]
+  timelineEvents  TimelineEvent[]
+
+  @@map("cases")
+}
+
+model Evidence {
+  id              String      @id @default(cuid())
+  fileName        String      @map("file_name")
+  fileUrl         String      @map("file_url")
+  fileSize        Int         @map("file_size")
+  mimeType        String      @map("mime_type")
+  evidenceType    EvidenceType @map("evidence_type")
+  tag             String?
+  description     String?
+  uploadedAt      DateTime    @default(now()) @map("uploaded_at")
+
+  case            Case        @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  caseId          String      @map("case_id")
+
+  @@map("evidence")
+}
+
+model Hearing {
+  id              String        @id @default(cuid())
+  title           String
+  date            DateTime
+  time            String?
+  courtName       String        @map("court_name")
+  courtType       CourtType     @default(DISTRICT_COURT) @map("court_type")
+  judgeName       String?       @map("judge_name")
+  notes           String?
+  status          HearingStatus @default(SCHEDULED)
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @updatedAt @map("updated_at")
+
+  case            Case          @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  caseId          String        @map("case_id")
+
+  lawyer          Lawyer        @relation(fields: [lawyerId], references: [id], onDelete: Cascade)
+  lawyerId        String        @map("lawyer_id")
+
+  @@map("hearings")
+}
+
+model TimelineEvent {
+  id              String    @id @default(cuid())
+  title           String
+  description     String?
+  eventDate       DateTime  @map("event_date")
+  eventType       String    @map("event_type")
+  createdAt       DateTime  @default(now()) @map("created_at")
+
+  case            Case      @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  caseId          String    @map("case_id")
+
+  @@map("timeline_events")
+}
