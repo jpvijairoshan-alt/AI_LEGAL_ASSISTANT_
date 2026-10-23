@@ -76,18 +76,10 @@ function formatFileSize(bytes: number) {
   return (bytes / 1048576).toFixed(1) + " MB";
 }
 
-const MOCK_EVIDENCE: EvidenceItem[] = [
-  { id: "mock-1", fileName: "witness_statement_ram.pdf", fileSize: 245000, evidenceType: "PDF", tag: "Witness Statement", description: "Statement of Ram Prasad, eye witness", uploadedAt: "2024-07-01T00:00:00Z", caseTitle: "State vs. Sharma", caseNumber: "CRL/2024/1234" },
-  { id: "mock-2", fileName: "cctv_footage_main_road.mp4", fileSize: 15728640, evidenceType: "VIDEO", tag: "CCTV Footage", description: "CCTV from main road junction near scene of crime", uploadedAt: "2024-07-05T00:00:00Z", caseTitle: "State vs. Sharma", caseNumber: "CRL/2024/1234" },
-  { id: "mock-3", fileName: "audio_recording_call.mp3", fileSize: 3145728, evidenceType: "AUDIO", tag: "Phone Call Recording", uploadedAt: "2024-07-08T00:00:00Z", caseTitle: "HDFC Bank vs. Ravi Kumar", caseNumber: "NI/2024/9012" },
-  { id: "mock-4", fileName: "contract_agreement.pdf", fileSize: 524288, evidenceType: "PDF", tag: "Exhibit A", description: "Original loan agreement dated 01/01/2023", uploadedAt: "2024-06-20T00:00:00Z", caseTitle: "HDFC Bank vs. Ravi Kumar", caseNumber: "NI/2024/9012" },
-  { id: "mock-5", fileName: "medical_report_victim.jpg", fileSize: 1048576, evidenceType: "IMAGE", tag: "Medical Report", uploadedAt: "2024-07-08T00:00:00Z", caseTitle: "State vs. Sharma", caseNumber: "CRL/2024/1234" },
-  { id: "mock-6", fileName: "property_deed.pdf", fileSize: 786432, evidenceType: "PDF", tag: "Exhibit B", uploadedAt: "2024-06-25T00:00:00Z", caseTitle: "Patel Corp vs. Singh Ltd", caseNumber: "CIV/2024/5678" },
-];
-
 export default function EvidencePage() {
   const [evidence, setEvidence] = useState<EvidenceItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState("ALL");
   const [uploadDialog, setUploadDialog] = useState(false);
@@ -118,8 +110,10 @@ export default function EvidencePage() {
         caseNumber: e.case?.caseNumber,
       }));
       setEvidence(mapped);
-    } catch {
-      setEvidence(MOCK_EVIDENCE);
+      setError(null);
+    } catch (err) {
+      console.error("Failed to load evidence", err);
+      setError("Unable to load evidence. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -169,7 +163,7 @@ export default function EvidencePage() {
       setUploadForm({ tag: "", description: "", caseId: "" });
       fetchEvidence();
     } catch (err: any) {
-      const msg = err.response?.data?.detail || "Upload failed. The evidence was saved locally.";
+      const msg = err.response?.data?.detail || "Upload failed. Please try again.";
       toast.error(msg);
     } finally {
       setUploading(false);
@@ -178,7 +172,7 @@ export default function EvidencePage() {
 
   function handleDownload(item: EvidenceItem) {
     if (!item.fileUrl) {
-      toast.info("This file does not have a downloadable source (mock data).");
+      toast.info("This file does not have a downloadable source.");
       return;
     }
     if (item.fileUrl.startsWith("data:")) {
@@ -202,7 +196,7 @@ export default function EvidencePage() {
 
   function handlePreview(item: EvidenceItem) {
     if (!item.fileUrl) {
-      toast.info("Preview not available for demo data.");
+      toast.info("Preview not available for this file.");
       return;
     }
     setPreviewItem(item);
@@ -272,6 +266,17 @@ export default function EvidencePage() {
       <div className="flex h-full items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <Card>
+        <CardContent className="flex flex-col items-center gap-4 py-16 text-center">
+          <p className="text-sm text-muted-foreground">{error}</p>
+          <Button onClick={fetchEvidence}>Retry</Button>
+        </CardContent>
+      </Card>
     );
   }
 

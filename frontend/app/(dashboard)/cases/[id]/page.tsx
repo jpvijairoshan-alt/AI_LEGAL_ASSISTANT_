@@ -52,42 +52,6 @@ interface CaseDetail {
   timelineEvents: any[];
 }
 
-const MOCK_CASE: CaseDetail = {
-  id: "1",
-  caseNumber: "CRL/2024/1234",
-  title: "State vs. Sharma",
-  clientName: "Rajesh Sharma",
-  clientPhone: "+91 98765 43210",
-  clientEmail: "rajesh@email.com",
-  courtName: "Delhi High Court",
-  courtType: "HIGH_COURT",
-  judgeName: "Hon'ble Justice Mehta",
-  opposingCounsel: "Advocate Priya Kapoor (Additional PP)",
-  stage: "BAIL",
-  status: "ACTIVE",
-  description: "Bail application under Section 439 CrPC for accused in robbery case FIR No. 234/2024 at Saket Police Station.",
-  nextHearingDate: new Date(Date.now() + 86400000).toISOString(),
-  filingDate: "2024-06-15T00:00:00Z",
-  createdAt: "2024-06-15T00:00:00Z",
-  evidence: [
-    { id: "e1", fileName: "witness_statement_ram.pdf", evidenceType: "PDF", tag: "Witness Statement", uploadedAt: "2024-07-01T00:00:00Z" },
-    { id: "e2", fileName: "cctv_footage_main_road.mp4", evidenceType: "VIDEO", tag: "CCTV Footage", uploadedAt: "2024-07-05T00:00:00Z" },
-    { id: "e3", fileName: "fir_copy.pdf", evidenceType: "PDF", tag: "Exhibit A", uploadedAt: "2024-06-20T00:00:00Z" },
-    { id: "e4", fileName: "medical_report_victim.jpg", evidenceType: "IMAGE", tag: "Medical Report", uploadedAt: "2024-07-08T00:00:00Z" },
-  ],
-  hearings: [
-    { id: "h1", title: "Bail Hearing - First Motion", date: "2024-07-10T00:00:00Z", time: "10:30 AM", courtName: "Delhi High Court", status: "COMPLETED", judgeName: "Justice Mehta", notes: "Bail application admitted. Counter filed by prosecution. Next date for arguments." },
-    { id: "h2", title: "Bail Arguments", date: new Date(Date.now() + 86400000).toISOString(), time: "10:30 AM", courtName: "Delhi High Court", status: "SCHEDULED", judgeName: "Justice Mehta" },
-  ],
-  timelineEvents: [
-    { id: "t1", title: "FIR Registered", description: "FIR No. 234/2024 registered at Saket Police Station under Sections 392/34 IPC", eventDate: "2024-05-20T00:00:00Z", eventType: "FIR" },
-    { id: "t2", title: "Client Consultation", description: "Initial consultation with Rajesh Sharma. Discussed case facts and bail prospects.", eventDate: "2024-06-10T00:00:00Z", eventType: "CONSULTATION" },
-    { id: "t3", title: "Bail Application Filed", description: "Bail application filed under Section 439 CrPC at Delhi High Court", eventDate: "2024-06-15T00:00:00Z", eventType: "FILING" },
-    { id: "t4", title: "First Hearing - Bail Admitted", description: "Bail application admitted. Prosecution given time to file counter.", eventDate: "2024-07-10T00:00:00Z", eventType: "HEARING" },
-    { id: "t5", title: "Evidence Submitted", description: "CCTV footage and witness statements submitted to court", eventDate: "2024-07-12T00:00:00Z", eventType: "EVIDENCE" },
-  ],
-};
-
 const TIMELINE_EVENT_ICONS: Record<string, string> = {
   FIR: "bg-red-100 text-red-600",
   CONSULTATION: "bg-blue-100 text-blue-600",
@@ -102,14 +66,22 @@ export default function CaseDetailPage() {
   const router = useRouter();
   const [caseData, setCaseData] = useState<CaseDetail | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     async function fetchCase() {
       try {
         const { data } = await api.get(`/cases/${params.id}`);
         setCaseData(data);
-      } catch {
-        setCaseData(MOCK_CASE);
+        setError(null);
+      } catch (err: any) {
+        console.error("Failed to load case", err);
+        setError(
+          err.response?.status === 404
+            ? "Case not found."
+            : "Unable to load case details. Please try again."
+        );
+        setCaseData(null);
       } finally {
         setLoading(false);
       }
@@ -121,6 +93,26 @@ export default function CaseDetailPage() {
     return (
       <div className="flex h-full items-center justify-center">
         <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="space-y-4">
+        <Link href="/cases">
+          <Button variant="ghost" size="icon">
+            <ArrowLeft className="h-5 w-5" />
+          </Button>
+        </Link>
+        <Card>
+          <CardContent className="flex flex-col items-center justify-center gap-4 py-12">
+            <p className="text-sm text-muted-foreground">{error}</p>
+            {!error.startsWith("Case not found") && (
+              <Button onClick={() => window.location.reload()}>Retry</Button>
+            )}
+          </CardContent>
+        </Card>
       </div>
     );
   }
@@ -217,7 +209,12 @@ export default function CaseDetailPage() {
               <CardDescription>Chronological events and milestones</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="relative ml-3 border-l-2 border-muted pl-6 space-y-6">
+              {caseData.timelineEvents.length === 0 ? (
+                <p className="py-8 text-center text-sm text-muted-foreground">
+                  No timeline events recorded yet.
+                </p>
+              ) : (
+                <div className="relative ml-3 border-l-2 border-muted pl-6 space-y-6">
                 {caseData.timelineEvents.map((event) => (
                   <div key={event.id} className="relative">
                     <div
@@ -240,17 +237,25 @@ export default function CaseDetailPage() {
                       <p className="text-xs text-muted-foreground">
                         {formatDate(event.eventDate)}
                       </p>
-                    </div>
-                  </div>
-                ))}
-              </div>
+                     </div>
+                   </div>
+                 ))}
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
 
         <TabsContent value="hearings" className="mt-4">
-          <div className="space-y-3">
-            {caseData.hearings.map((hearing) => (
+          {caseData.hearings.length === 0 ? (
+            <Card>
+              <CardContent className="py-8 text-center text-sm text-muted-foreground">
+                No hearings scheduled yet.
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="space-y-3">
+              {caseData.hearings.map((hearing) => (
               <Card key={hearing.id}>
                 <CardContent className="flex items-center justify-between p-5">
                   <div className="space-y-1">
@@ -270,7 +275,8 @@ export default function CaseDetailPage() {
                 </CardContent>
               </Card>
             ))}
-          </div>
+            </div>
+          )}
         </TabsContent>
 
         <TabsContent value="evidence" className="mt-4">
@@ -281,22 +287,30 @@ export default function CaseDetailPage() {
               </Button>
             </Link>
           </div>
+          {caseData.evidence.length === 0 ? (
+            <Card>
+              <CardContent className="py-8 text-center text-sm text-muted-foreground">
+                No evidence uploaded yet.
+              </CardContent>
+            </Card>
+          ) : (
           <div className="grid gap-3 sm:grid-cols-2">
             {caseData.evidence.map((ev) => (
               <Card key={ev.id}>
                 <CardContent className="flex items-center justify-between p-4">
-                  <div className="space-y-1">
-                    <p className="text-sm font-medium">{ev.fileName}</p>
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                      <Badge variant="outline">{ev.evidenceType}</Badge>
-                      {ev.tag && <span>{ev.tag}</span>}
-                      <span>{formatDate(ev.uploadedAt)}</span>
+                    <div className="space-y-1">
+                      <p className="text-sm font-medium">{ev.fileName}</p>
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <Badge variant="outline">{ev.evidenceType}</Badge>
+                        {ev.tag && <span>{ev.tag}</span>}
+                        <span>{formatDate(ev.uploadedAt)}</span>
+                      </div>
                     </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
+                  </CardContent>
+                </Card>
+              ))}
           </div>
+          )}
         </TabsContent>
       </Tabs>
     </div>

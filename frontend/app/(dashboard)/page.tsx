@@ -35,93 +35,22 @@ export default function DashboardPage() {
     upcomingHearings: [],
   });
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  async function fetchData() {
+    try {
+      const { data: stats } = await api.get("/dashboard/stats");
+      setData(stats);
+      setError(null);
+    } catch (err) {
+      console.error("Failed to load dashboard data", err);
+      setError("Unable to load dashboard data. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  }
 
   useEffect(() => {
-    async function fetchData() {
-      try {
-        const { data: stats } = await api.get("/dashboard/stats");
-        setData(stats);
-      } catch {
-        setData({
-          totalCases: 24,
-          activeCases: 18,
-          todayHearings: [
-            {
-              id: "1",
-              title: "State vs. Sharma - Bail Hearing",
-              date: new Date().toISOString(),
-              time: "10:30 AM",
-              courtName: "Delhi High Court",
-              courtType: "HIGH_COURT",
-              judgeName: "Hon'ble Justice Mehta",
-              status: "SCHEDULED",
-              case: { caseNumber: "CRL/2024/1234", title: "State vs. Sharma" },
-            },
-            {
-              id: "2",
-              title: "Patel Corp vs. Singh Ltd - Arguments",
-              date: new Date().toISOString(),
-              time: "2:00 PM",
-              courtName: "Saket District Court",
-              courtType: "DISTRICT_COURT",
-              judgeName: "Ms. Judge Kumari",
-              status: "SCHEDULED",
-              case: { caseNumber: "CIV/2024/5678", title: "Patel Corp vs. Singh Ltd" },
-            },
-          ],
-          recentCases: [
-            {
-              id: "1",
-              caseNumber: "CRL/2024/1234",
-              title: "State vs. Sharma",
-              courtName: "Delhi High Court",
-              stage: "BAIL",
-              status: "ACTIVE",
-            },
-            {
-              id: "2",
-              caseNumber: "CIV/2024/5678",
-              title: "Patel Corp vs. Singh Ltd",
-              courtName: "Saket District Court",
-              stage: "ARGUMENTS",
-              status: "ACTIVE",
-            },
-            {
-              id: "3",
-              caseNumber: "NI/2024/9012",
-              title: "HDFC Bank vs. Ravi Kumar",
-              courtName: "Sessions Court Mumbai",
-              stage: "TRIAL",
-              status: "ACTIVE",
-            },
-          ],
-          upcomingHearings: [
-            {
-              id: "3",
-              title: "Mehta Estate - Succession",
-              date: new Date(Date.now() + 86400000).toISOString(),
-              time: "11:00 AM",
-              courtName: "Bombay High Court",
-              courtType: "HIGH_COURT",
-              status: "SCHEDULED",
-              case: { caseNumber: "CIV/2024/3456" },
-            },
-            {
-              id: "4",
-              title: "Check Bounce - NI Act 138",
-              date: new Date(Date.now() + 2 * 86400000).toISOString(),
-              time: "3:30 PM",
-              courtName: "Tis Hazari Court",
-              courtType: "DISTRICT_COURT",
-              status: "SCHEDULED",
-              case: { caseNumber: "NI/2024/7890" },
-            },
-          ],
-        });
-      } finally {
-        setLoading(false);
-      }
-    }
     fetchData();
   }, []);
 
@@ -160,6 +89,20 @@ export default function DashboardPage() {
     return (
       <div className="flex h-full items-center justify-center">
         <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <Card className="max-w-md">
+          <CardContent className="flex flex-col items-center gap-4 py-10 text-center">
+            <AlertCircle className="h-10 w-10 text-destructive" />
+            <p className="text-sm text-muted-foreground">{error}</p>
+            <Button onClick={fetchData}>Retry</Button>
+          </CardContent>
+        </Card>
       </div>
     );
   }
@@ -250,8 +193,14 @@ export default function DashboardPage() {
             </Link>
           </CardHeader>
           <CardContent>
-            <div className="space-y-3">
-              {data.recentCases.map((c: any) => (
+            {data.recentCases.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
+                <FolderOpen className="mb-2 h-10 w-10 opacity-40" />
+                <p>No cases yet</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {data.recentCases.map((c: any) => (
                 <Link
                   key={c.id}
                   href={`/cases/${c.id}`}
@@ -265,8 +214,9 @@ export default function DashboardPage() {
                     {STAGE_LABELS[c.stage] || c.stage}
                   </Badge>
                 </Link>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -281,24 +231,31 @@ export default function DashboardPage() {
           </Link>
         </CardHeader>
         <CardContent>
-          <div className="grid gap-3 sm:grid-cols-2">
-            {data.upcomingHearings.map((h: any) => (
-              <div key={h.id} className="rounded-lg border p-4">
-                <div className="flex items-start justify-between">
-                  <div className="space-y-1">
-                    <p className="font-medium">{h.title}</p>
-                    <p className="text-sm text-muted-foreground">
-                      {formatDate(h.date)} at {h.time}
-                    </p>
-                    <p className="text-xs text-muted-foreground">{h.courtName}</p>
+          {data.upcomingHearings.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
+              <Calendar className="mb-2 h-10 w-10 opacity-40" />
+              <p>No upcoming hearings</p>
+            </div>
+          ) : (
+            <div className="grid gap-3 sm:grid-cols-2">
+              {data.upcomingHearings.map((h: any) => (
+                <div key={h.id} className="rounded-lg border p-4">
+                  <div className="flex items-start justify-between">
+                    <div className="space-y-1">
+                      <p className="font-medium">{h.title}</p>
+                      <p className="text-sm text-muted-foreground">
+                        {formatDate(h.date)} at {h.time}
+                      </p>
+                      <p className="text-xs text-muted-foreground">{h.courtName}</p>
+                    </div>
+                    <Badge className={COURT_TYPE_COLORS_MAP[h.courtType] || ""}>
+                      {COURT_TYPE_LABELS[h.courtType] || h.courtType}
+                    </Badge>
                   </div>
-                  <Badge className={COURT_TYPE_COLORS_MAP[h.courtType] || ""}>
-                    {COURT_TYPE_LABELS[h.courtType] || h.courtType}
-                  </Badge>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

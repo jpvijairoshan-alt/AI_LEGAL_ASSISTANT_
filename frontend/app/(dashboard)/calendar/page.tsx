@@ -64,80 +64,6 @@ interface HearingEvent {
 }
 
 const now = new Date();
-const MOCK_HEARINGS: HearingEvent[] = [
-  {
-    id: "mock-1",
-    title: "Bail Hearing - State vs. Sharma",
-    start: new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 10, 30),
-    end: new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 12, 0),
-    time: "10:30 AM",
-    courtName: "Delhi High Court",
-    courtType: "HIGH_COURT",
-    judgeName: "Justice Mehta",
-    caseNumber: "CRL/2024/1234",
-    status: "SCHEDULED",
-  },
-  {
-    id: "mock-2",
-    title: "Arguments - Patel Corp vs. Singh",
-    start: new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 14, 0),
-    end: new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 16, 0),
-    time: "2:00 PM",
-    courtName: "Saket District Court",
-    courtType: "DISTRICT_COURT",
-    judgeName: "Ms. Judge Kumari",
-    caseNumber: "CIV/2024/5678",
-    status: "SCHEDULED",
-  },
-  {
-    id: "mock-3",
-    title: "Succession Hearing - Mehta Estate",
-    start: new Date(now.getFullYear(), now.getMonth(), now.getDate() + 3, 11, 0),
-    end: new Date(now.getFullYear(), now.getMonth(), now.getDate() + 3, 13, 0),
-    time: "11:00 AM",
-    courtName: "Bombay High Court",
-    courtType: "HIGH_COURT",
-    judgeName: "Justice Patel",
-    caseNumber: "CIV/2024/3456",
-    status: "SCHEDULED",
-  },
-  {
-    id: "mock-4",
-    title: "Check Bounce - NI Act 138",
-    start: new Date(now.getFullYear(), now.getMonth(), now.getDate() + 5, 15, 30),
-    end: new Date(now.getFullYear(), now.getMonth(), now.getDate() + 5, 17, 0),
-    time: "3:30 PM",
-    courtName: "Tis Hazari Court",
-    courtType: "DISTRICT_COURT",
-    judgeName: "Ms. Sharma",
-    caseNumber: "NI/2024/7890",
-    status: "SCHEDULED",
-  },
-  {
-    id: "mock-5",
-    title: "Cross-Examination - Matrimonial",
-    start: new Date(now.getFullYear(), now.getMonth(), now.getDate() - 2, 10, 0),
-    end: new Date(now.getFullYear(), now.getMonth(), now.getDate() - 2, 12, 0),
-    time: "10:00 AM",
-    courtName: "Family Court Pune",
-    courtType: "TRIBUNAL",
-    judgeName: "Mrs. Deshpande",
-    caseNumber: "MAT/2024/7890",
-    status: "COMPLETED",
-  },
-  {
-    id: "mock-6",
-    title: "Filing - Writ Petition",
-    start: new Date(now.getFullYear(), now.getMonth(), now.getDate() + 7, 9, 0),
-    end: new Date(now.getFullYear(), now.getMonth(), now.getDate() + 7, 10, 0),
-    time: "9:00 AM",
-    courtName: "Supreme Court of India",
-    courtType: "SUPREME_COURT",
-    judgeName: "",
-    caseNumber: "WPC/2024/5000",
-    status: "SCHEDULED",
-  },
-];
 
 const COURT_EVENT_COLORS: Record<string, string> = {
   HIGH_COURT: "#3b82f6",
@@ -168,6 +94,7 @@ function formatTime12(hours: number, minutes: number): string {
 export default function CalendarPage() {
   const [events, setEvents] = useState<HearingEvent[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [selectedEvent, setSelectedEvent] = useState<HearingEvent | null>(null);
   const [addDialog, setAddDialog] = useState(false);
   const [currentDate, setCurrentDate] = useState(now);
@@ -210,8 +137,10 @@ export default function CalendarPage() {
         };
       });
       setEvents(mapped);
-    } catch {
-      setEvents(MOCK_HEARINGS);
+      setError(null);
+    } catch (err) {
+      console.error("Failed to load hearings", err);
+      setError("Unable to load hearings. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -296,6 +225,17 @@ export default function CalendarPage() {
       <div className="flex h-full items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <Card>
+        <CardContent className="flex flex-col items-center gap-4 py-16 text-center">
+          <p className="text-sm text-muted-foreground">{error}</p>
+          <Button onClick={fetchHearings}>Retry</Button>
+        </CardContent>
+      </Card>
     );
   }
 

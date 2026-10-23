@@ -47,6 +47,7 @@ interface Case {
 export default function CasesPage() {
   const [cases, setCases] = useState<Case[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
 
@@ -58,62 +59,10 @@ export default function CasesPage() {
     try {
       const { data } = await api.get("/cases");
       setCases(data);
-    } catch {
-      setCases([
-        {
-          id: "1",
-          caseNumber: "CRL/2024/1234",
-          title: "State vs. Sharma",
-          clientName: "Rajesh Sharma",
-          courtName: "Delhi High Court",
-          stage: "BAIL",
-          status: "ACTIVE",
-          nextHearingDate: new Date(Date.now() + 86400000).toISOString(),
-          createdAt: "2024-01-15T00:00:00Z",
-        },
-        {
-          id: "2",
-          caseNumber: "CIV/2024/5678",
-          title: "Patel Corp vs. Singh Ltd",
-          clientName: "Patel Corporation",
-          courtName: "Saket District Court",
-          stage: "ARGUMENTS",
-          status: "ACTIVE",
-          nextHearingDate: new Date(Date.now() + 2 * 86400000).toISOString(),
-          createdAt: "2024-02-20T00:00:00Z",
-        },
-        {
-          id: "3",
-          caseNumber: "NI/2024/9012",
-          title: "HDFC Bank vs. Ravi Kumar",
-          clientName: "HDFC Bank Ltd",
-          courtName: "Sessions Court Mumbai",
-          stage: "TRIAL",
-          status: "ACTIVE",
-          createdAt: "2024-03-10T00:00:00Z",
-        },
-        {
-          id: "4",
-          caseNumber: "WPC/2024/3456",
-          title: "Rahul Verma v. State of UP",
-          clientName: "Rahul Verma",
-          courtName: "Allahabad High Court",
-          stage: "JUDGMENT",
-          status: "DISPOSED",
-          createdAt: "2023-11-05T00:00:00Z",
-        },
-        {
-          id: "5",
-          caseNumber: "MAT/2024/7890",
-          title: "Anita vs. Vikram Divorce",
-          clientName: "Anita Desai",
-          courtName: "Family Court Pune",
-          stage: "CROSS_EXAMINATION",
-          status: "ACTIVE",
-          nextHearingDate: new Date(Date.now() + 5 * 86400000).toISOString(),
-          createdAt: "2024-04-01T00:00:00Z",
-        },
-      ]);
+      setError(null);
+    } catch (err) {
+      console.error("Failed to load cases", err);
+      setError("Unable to load cases. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -181,6 +130,13 @@ export default function CasesPage() {
         <div className="flex justify-center py-12">
           <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
         </div>
+      ) : error ? (
+        <Card>
+          <CardContent className="flex flex-col items-center justify-center gap-4 py-12">
+            <p className="text-sm text-muted-foreground">{error}</p>
+            <Button onClick={fetchCases}>Retry</Button>
+          </CardContent>
+        </Card>
       ) : filtered.length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-12">
