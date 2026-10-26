@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   Scale,
   LayoutDashboard,
@@ -10,13 +10,13 @@ import {
   Calendar,
   FileStack,
   Bot,
-  Settings,
   LogOut,
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { clearSession } from "@/lib/session";
 
 const navItems = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
@@ -28,6 +28,7 @@ const navItems = [
 
 export function Sidebar() {
   const pathname = usePathname();
+  const router = useRouter();
   const [collapsed, setCollapsed] = useState(false);
 
   return (
@@ -54,7 +55,8 @@ export function Sidebar() {
 
       <nav className="flex-1 space-y-1 px-2 py-4">
         {navItems.map((item) => {
-          const isActive = pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(item.href));
+          const isActive =
+            item.href === "/" ? pathname === "/" : pathname === item.href || pathname.startsWith(`${item.href}/`);
           return (
             <Link
               key={item.href}
@@ -75,14 +77,17 @@ export function Sidebar() {
       </nav>
 
       <div className="border-t px-2 py-4 space-y-1">
-        <Link
-          href="/login"
-          onClick={() => localStorage.removeItem("token")}
-          className="flex items-center rounded-md px-3 py-2.5 text-sm font-medium text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+        <button
+          type="button"
+          onClick={() => {
+            clearSession();
+            router.replace("/login");
+          }}
+          className="flex w-full items-center rounded-md px-3 py-2.5 text-sm font-medium text-muted-foreground hover:bg-accent hover:text-accent-foreground"
         >
           <LogOut className={cn("h-5 w-5 shrink-0", collapsed ? "mx-auto" : "mr-3")} />
           {!collapsed && <span>Sign Out</span>}
-        </Link>
+        </button>
       </div>
     </aside>
   );

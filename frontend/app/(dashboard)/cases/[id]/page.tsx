@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams } from "next/navigation";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -10,11 +10,9 @@ import {
   FileText,
   Upload,
   Clock,
-  MapPin,
   User,
   Scale,
   Gavel,
-  ChevronRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -29,28 +27,7 @@ import {
   formatDate,
 } from "@/lib/utils";
 import api from "@/lib/api";
-
-interface CaseDetail {
-  id: string;
-  caseNumber: string;
-  title: string;
-  clientName: string;
-  clientPhone?: string;
-  clientEmail?: string;
-  courtName: string;
-  courtType: string;
-  judgeName?: string;
-  opposingCounsel?: string;
-  stage: string;
-  status: string;
-  description?: string;
-  nextHearingDate?: string;
-  filingDate?: string;
-  createdAt: string;
-  evidence: any[];
-  hearings: any[];
-  timelineEvents: any[];
-}
+import type { CaseDetail } from "@/types";
 
 const TIMELINE_EVENT_ICONS: Record<string, string> = {
   FIR: "bg-red-100 text-red-600",
@@ -63,7 +40,6 @@ const TIMELINE_EVENT_ICONS: Record<string, string> = {
 
 export default function CaseDetailPage() {
   const params = useParams();
-  const router = useRouter();
   const [caseData, setCaseData] = useState<CaseDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

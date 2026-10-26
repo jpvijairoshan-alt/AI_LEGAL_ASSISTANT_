@@ -5,8 +5,6 @@ import { Calendar as BigCalendar, dateFnsLocalizer, Views } from "react-big-cale
 import { format, parse, startOfWeek, getDay } from "date-fns";
 import "react-big-calendar/lib/css/react-big-calendar.css";
 import {
-  ChevronLeft,
-  ChevronRight,
   Plus,
   MapPin,
   Clock,
@@ -15,7 +13,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -37,6 +35,7 @@ import {
 import { COURT_TYPE_LABELS, formatDate } from "@/lib/utils";
 import { toast } from "sonner";
 import api from "@/lib/api";
+import type { Case, Hearing } from "@/types";
 
 import { enIN } from "date-fns/locale";
 
@@ -106,18 +105,26 @@ export default function CalendarPage() {
     courtName: "",
     courtType: "DISTRICT_COURT",
     judgeName: "",
-    caseNumber: "",
+    caseId: "",
     notes: "",
   });
+  const [cases, setCases] = useState<Pick<Case, "id" | "caseNumber" | "title">[]>([]);
 
   useEffect(() => {
     fetchHearings();
+    api
+      .get("/cases")
+      .then(({ data }) => setCases(data))
+      .catch((err) => {
+        console.error("Failed to load cases", err);
+        toast.error("Could not load your cases for the hearing form.");
+      });
   }, []);
 
   async function fetchHearings() {
     try {
       const { data } = await api.get("/hearings");
-      const mapped: HearingEvent[] = data.map((h: any) => {
+      const mapped: HearingEvent[] = (data as Hearing[]).map((h) => {
         const d = new Date(h.date);
         const { hours, minutes } = parseTimeTo24(h.time || "10:00");
         const start = new Date(d.getFullYear(), d.getMonth(), d.getDate(), hours, minutes);
@@ -171,6 +178,10 @@ export default function CalendarPage() {
   }
 
   async function handleAddHearing() {
+    if (!newHearing.caseId) {
+      toast.error("Please select a case");
+      return;
+    }
     if (!newHearing.title || !newHearing.date) {
       toast.error("Please fill required fields (title and date)");
       return;
@@ -188,6 +199,7 @@ export default function CalendarPage() {
         courtType: newHearing.courtType,
         judgeName: newHearing.judgeName,
         notes: newHearing.notes,
+        caseId: newHearing.caseId,
       });
 
       const d = new Date(data.date);
@@ -204,13 +216,13 @@ export default function CalendarPage() {
         courtName: data.courtName,
         courtType: data.courtType,
         judgeName: data.judgeName || "",
-        caseNumber: data.case?.caseNumber || newHearing.caseNumber,
+        caseNumber: data.case?.caseNumber || "",
         notes: data.notes || "",
         status: data.status,
       };
       setEvents((prev) => [...prev, event]);
       setAddDialog(false);
-      setNewHearing({ title: "", date: "", time: "", courtName: "", courtType: "DISTRICT_COURT", judgeName: "", caseNumber: "", notes: "" });
+      setNewHearing({ title: "", date: "", time: "", courtName: "", courtType: "DISTRICT_COURT", judgeName: "", caseId: "", notes: "" });
       toast.success("Hearing scheduled successfully!");
     } catch (err: any) {
       const msg = err.response?.data?.detail || "Failed to schedule hearing";
@@ -330,6 +342,17 @@ export default function CalendarPage() {
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
+              <Label>Case *</Label>
+              <Select value={newHearing.caseId} onValueChange={(v) => setNewHearing((p) => ({ ...p, caseId: v }))}>
+                <SelectTrigger><SelectValue placeholder={cases.length ? "Select a case" : "No cases yet - create a case first"} /></SelectTrigger>
+                <SelectContent>
+                  {cases.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>{c.caseNumber} - {c.title}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
               <Label>Hearing Title *</Label>
               <Input placeholder="e.g., Bail Hearing - State vs. Sharma" value={newHearing.title} onChange={(e) => setNewHearing((p) => ({ ...p, title: e.target.value }))} />
             </div>
@@ -363,15 +386,9 @@ export default function CalendarPage() {
                 <Input placeholder="e.g., Delhi High Court" value={newHearing.courtName} onChange={(e) => setNewHearing((p) => ({ ...p, courtName: e.target.value }))} />
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Judge Name</Label>
-                <Input placeholder="e.g., Justice Mehta" value={newHearing.judgeName} onChange={(e) => setNewHearing((p) => ({ ...p, judgeName: e.target.value }))} />
-              </div>
-              <div className="space-y-2">
-                <Label>Case Number</Label>
-                <Input placeholder="e.g., CRL/2024/1234" value={newHearing.caseNumber} onChange={(e) => setNewHearing((p) => ({ ...p, caseNumber: e.target.value }))} />
-              </div>
+            <div className="space-y-2">
+              <Label>Judge Name</Label>
+              <Input placeholder="e.g., Justice Mehta" value={newHearing.judgeName} onChange={(e) => setNewHearing((p) => ({ ...p, judgeName: e.target.value }))} />
             </div>
             <div className="space-y-2">
               <Label>Notes</Label>

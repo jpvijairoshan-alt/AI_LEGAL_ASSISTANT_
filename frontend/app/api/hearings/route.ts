@@ -1,25 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
-
-const prisma = new PrismaClient();
-
-function getLawyerId(request: NextRequest): string | null {
-  const auth = request.headers.get("Authorization");
-  if (!auth?.startsWith("Bearer ")) return null;
-  try {
-    const jwt = require("jsonwebtoken");
-    const decoded = jwt.verify(auth.substring(7), process.env.NEXTAUTH_SECRET || "fallback-secret-key");
-    return decoded.lawyerId;
-  } catch {
-    return null;
-  }
-}
+import { prisma } from "@/lib/prisma";
+import { getLawyerId } from "@/lib/auth";
+import { hearingCreateSchema, invalidBody, readJson, unauthorized, validate } from "@/lib/validation";
 
 export async function GET(request: NextRequest) {
   const lawyerId = getLawyerId(request);
-  if (!lawyerId) {
-    return NextResponse.json({ detail: "Unauthorized" }, { status: 401 });
-  }
+  if (!lawyerId) return unauthorized();
 
   try {
     const hearings = await prisma.hearing.findMany({
@@ -36,46 +22,35 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   const lawyerId = getLawyerId(request);
-  if (!lawyerId) {
-    return NextResponse.json({ detail: "Unauthorized" }, { status: 401 });
-  }
+  if (!lawyerId) return unauthorized();
 
   try {
-    const body = await request.json();
-    const { title, date, time, courtName, courtType, judgeName, notes, caseId } = body;
+    const body = await readJson(request);
+    if (body === null) return invalidBody();
+    const parsed = validate(hearingCreateSchema, body);
+    if (parsed.error) return parsed.error;
+    const { caseId, date, ...rest } = parsed.data;
 
-    if (!title || !date || !courtName) {
-      return NextResponse.json({ detail: "Title, date, and court name are required" }, { status: 400 });
-    }
+    const ownedCase = await prisma.case.findFirst({ where: { id: caseId, lawyerId }, select: { id: true } });
+    if (!ownedCase) return NextResponse.json({ detail: "Case not found" }, { status: 404 });
 
-    let resolvedCaseId = caseId;
-    if (!resolvedCaseId) {
-      const firstCase = await prisma.case.findFirst({ where: { lawyerId } });
-      if (!firstCase) {
-        return NextResponse.json({ detail: "No cases found. Create a case first." }, { status: 400 });
-      }
-      resolvedCaseId = firstCase.id;
-    }
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
 
-    const hearing = await prisma.hearing.create({
-      data: {
-        title,
-        date: new Date(date),
-        time: time || null,
-        courtName,
-        courtType: courtType || "DISTRICT_COURT",
-        judgeName: judgeName || null,
-        notes: notes || null,
-        status: "SCHEDULED",
-        caseId: resolvedCaseId,
-        lawyerId,
-      },
-      include: { case: { select: { caseNumber: true, title: true } } },
-    });
+    const hearing = await prisma.$transaction(async (tx) => {
+      const created = await tx.hearing.create({
+        data: { ...rest, date: new Date(date), status: "SCHEDULED", caseId, lawyerId },
+        include: { case: { select: { caseNumber: true, title: true } } },
+      });
 
-    await prisma.case.update({
-      where: { id: resolvedCaseId },
-      data: { nextHearingDate: new Date(date) },
+      // Case.nextHearingDate = earliest upcoming SCHEDULED hearing of THIS case.
+      const next = await tx.hearing.findFirst({
+        where: { caseId, status: "SCHEDULED", date: { gte: startOfToday } },
+        orderBy: { date: "asc" },
+        select: { date: true },
+      });
+      await tx.case.update({ where: { id: caseId }, data: { nextHearingDate: next?.date ?? null } });
+      return created;
     });
 
     return NextResponse.json(hearing, { status: 201 });

@@ -1,20 +1,20 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Bot, Send, Loader2, Scale, BookOpen, Sparkles } from "lucide-react";
+import { Bot, Send, Loader2, Scale, BookOpen, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import api from "@/lib/api";
+import type { ChatMessage } from "@/types";
 
-interface ChatMessage {
-  id: string;
-  role: "user" | "assistant";
-  content: string;
-  sources?: { title: string; section?: string; content: string }[];
-  timestamp: Date;
-}
+const DISCLAIMER_TEXT =
+  "Informational only, not legal advice. AI answers can be incomplete or wrong - verify every provision against the bare Act and current case law.";
+
+// The LLM call can be slow; the Next.js proxy and axios both allow up to 2 minutes.
+const CHAT_TIMEOUT_MS = 120_000;
 
 const SUGGESTED_QUESTIONS = [
   "What are the bail provisions under Section 439 CrPC?",
@@ -35,51 +35,63 @@ export default function AIAssistantPage() {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [messages]);
 
+  function describeError(err: any): string {
+    if (!err.response) {
+      return err.code === "ECONNABORTED"
+        ? "The AI service took too long to respond. Please try again."
+        : "Cannot reach the AI backend. Make sure the backend server is running (port 8000) and BACKEND_URL is correct.";
+    }
+    const detail = err.response.data?.detail;
+    const message = typeof detail === "string" ? detail : "";
+    switch (err.response.status) {
+      case 503:
+        return message || "The legal dataset has not been indexed yet. Run the ingestion step in the backend (see README).";
+      case 400:
+        return message || "Please enter a valid question.";
+      case 502:
+      case 504:
+        return "The AI backend is not responding. Make sure it is running and try again.";
+      default:
+        return message || `The AI service returned an error (${err.response.status}).`;
+    }
+  }
+
   async function sendMessage(text: string) {
-    if (!text.trim() || loading) return;
-    const userMsg: ChatMessage = {
-      id: Date.now().toString(),
-      role: "user",
-      content: text.trim(),
-      timestamp: new Date(),
-    };
-    setMessages((prev) => [...prev, userMsg]);
+    const question = text.trim();
+    if (!question || loading) return;
+
+    // Last few turns as conversation context (errors are not sent).
+    const history = messages
+      .filter((m) => !m.isError)
+      .slice(-6)
+      .map((m) => ({ role: m.role, content: m.content }));
+
+    setMessages((prev) => [...prev, { id: Date.now().toString(), role: "user", content: question }]);
     setInput("");
     setLoading(true);
 
     try {
-      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000";
-      const res = await fetch(`${backendUrl}/api/chat`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question: text.trim() }),
-      });
-      if (!res.ok) {
-        const errData = await res.json().catch(() => ({}));
-        throw new Error(errData.detail || `Backend returned ${res.status}`);
-      }
-      const data = await res.json();
-      const assistantMsg: ChatMessage = {
-        id: (Date.now() + 1).toString(),
-        role: "assistant",
-        content: data.answer || "I could not find relevant information. Please try rephrasing your question.",
-        sources: data.sources || [],
-        timestamp: new Date(),
-      };
-      setMessages((prev) => [...prev, assistantMsg]);
-    } catch (err: any) {
-      const isNetworkError = err instanceof TypeError && err.message === "Failed to fetch";
-      const errorMessage = isNetworkError
-        ? "Cannot connect to the AI backend. Please make sure the backend server is running on port 8000."
-        : `Error: ${err.message || "The AI service is currently unavailable. Please try again later."}`;
+      // 401 is handled globally by the axios interceptor (clears the session and redirects to /login).
+      const { data } = await api.post(
+        "/backend/chat",
+        { question, history },
+        { timeout: CHAT_TIMEOUT_MS }
+      );
       setMessages((prev) => [
         ...prev,
         {
           id: (Date.now() + 1).toString(),
           role: "assistant",
-          content: errorMessage,
-          timestamp: new Date(),
+          content: data.answer || "I could not find relevant information. Please try rephrasing your question.",
+          sources: data.sources || [],
         },
+      ]);
+    } catch (err: any) {
+      console.error("AI chat error:", err);
+      if (err.response?.status === 401) return;
+      setMessages((prev) => [
+        ...prev,
+        { id: (Date.now() + 1).toString(), role: "assistant", content: describeError(err), isError: true },
       ]);
     } finally {
       setLoading(false);
@@ -92,6 +104,10 @@ export default function AIAssistantPage() {
         <div className="mb-4">
           <h1 className="text-2xl font-bold tracking-tight">AI Legal Assistant</h1>
           <p className="text-muted-foreground">Ask questions about Indian law powered by RAG</p>
+          <p className="mt-2 flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+            <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+            {DISCLAIMER_TEXT}
+          </p>
         </div>
 
         <Card className="flex flex-1 flex-col overflow-hidden">
@@ -126,13 +142,15 @@ export default function AIAssistantPage() {
                         className={`max-w-[80%] rounded-lg px-4 py-3 ${
                           msg.role === "user"
                             ? "bg-primary text-primary-foreground"
-                            : "bg-muted"
+                            : msg.isError
+                              ? "border border-destructive/40 bg-destructive/10 text-destructive"
+                              : "bg-muted"
                         }`}
                       >
                         {msg.role === "assistant" && (
                           <div className="mb-1 flex items-center gap-1.5">
                             <Scale className="h-3.5 w-3.5" />
-                            <span className="text-xs font-semibold">Legal AI</span>
+                            <span className="text-xs font-semibold">{msg.isError ? "Error" : "Legal AI"}</span>
                           </div>
                         )}
                         <div className="whitespace-pre-wrap text-sm">{msg.content}</div>

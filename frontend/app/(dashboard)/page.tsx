@@ -5,7 +5,6 @@ import Link from "next/link";
 import {
   FolderOpen,
   Calendar,
-  FileStack,
   Bot,
   TrendingUp,
   Clock,
@@ -17,17 +16,10 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { STAGE_LABELS, COURT_TYPE_LABELS, formatDate } from "@/lib/utils";
 import api from "@/lib/api";
-
-interface DashboardData {
-  totalCases: number;
-  activeCases: number;
-  todayHearings: any[];
-  recentCases: any[];
-  upcomingHearings: any[];
-}
+import type { DashboardStats } from "@/types";
 
 export default function DashboardPage() {
-  const [data, setData] = useState<DashboardData>({
+  const [data, setData] = useState<DashboardStats>({
     totalCases: 0,
     activeCases: 0,
     todayHearings: [],
@@ -153,7 +145,7 @@ export default function DashboardPage() {
               </div>
             ) : (
               <div className="space-y-3">
-                {data.todayHearings.map((hearing: any) => (
+                {data.todayHearings.map((hearing) => (
                   <div
                     key={hearing.id}
                     className="flex items-center justify-between rounded-lg border p-4"
@@ -200,7 +192,7 @@ export default function DashboardPage() {
               </div>
             ) : (
               <div className="space-y-3">
-                {data.recentCases.map((c: any) => (
+                {data.recentCases.map((c) => (
                 <Link
                   key={c.id}
                   href={`/cases/${c.id}`}
@@ -238,7 +230,7 @@ export default function DashboardPage() {
             </div>
           ) : (
             <div className="grid gap-3 sm:grid-cols-2">
-              {data.upcomingHearings.map((h: any) => (
+              {data.upcomingHearings.map((h) => (
                 <div key={h.id} className="rounded-lg border p-4">
                   <div className="flex items-start justify-between">
                     <div className="space-y-1">

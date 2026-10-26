@@ -1,19 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
-
-const prisma = new PrismaClient();
-
-function getLawyerId(request: NextRequest): string | null {
-  const auth = request.headers.get("Authorization");
-  if (!auth?.startsWith("Bearer ")) return null;
-  try {
-    const jwt = require("jsonwebtoken");
-    const decoded = jwt.verify(auth.substring(7), process.env.NEXTAUTH_SECRET || "fallback-secret-key");
-    return decoded.lawyerId;
-  } catch {
-    return null;
-  }
-}
+import { prisma } from "@/lib/prisma";
+import { getLawyerId } from "@/lib/auth";
 
 export async function GET(request: NextRequest) {
   const lawyerId = getLawyerId(request);

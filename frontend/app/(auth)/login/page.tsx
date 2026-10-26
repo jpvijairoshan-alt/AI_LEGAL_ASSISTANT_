@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Scale, Mail, Lock, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -10,9 +9,9 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
 import api from "@/lib/api";
+import { setSession } from "@/lib/session";
 
 export default function LoginPage() {
-  const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -22,18 +21,15 @@ export default function LoginPage() {
     setLoading(true);
     try {
       const { data } = await api.post("/auth/login", { email, password });
-      
-      // Save token and user details safely
-      localStorage.setItem("token", data.token || "logged_in");
-      localStorage.setItem("user", JSON.stringify(data.lawyer || data.user || { email }));
-      
+      if (!data?.token) {
+        throw new Error("Login response did not include a token");
+      }
+      setSession(data.token, data.lawyer);
       toast.success("Login successful!");
-      
-      // Force page navigation so auth layout picks up localStorage immediately
       window.location.href = "/";
     } catch (err: any) {
-      console.error("Login Error:", err);
-      toast.error(err.response?.data?.error || err.response?.data?.detail || "Invalid credentials");
+      console.error("Login error:", err);
+      toast.error(err.response?.data?.detail || err.message || "Login failed");
     } finally {
       setLoading(false);
     }

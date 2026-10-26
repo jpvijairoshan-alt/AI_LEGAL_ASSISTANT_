@@ -1,17 +1,14 @@
 import axios from "axios";
+import { clearSession, getToken } from "@/lib/session";
 
-const api = axios.create({
-  // Routes to Next.js API route handlers (/api/auth/login)
-  baseURL: process.env.NEXT_PUBLIC_API_URL || "/api",
-  headers: { "Content-Type": "application/json" },
-});
+// All calls go through the Next.js app: /api/* are route handlers,
+// /api/backend/* is rewritten to the FastAPI server (see next.config.js).
+const api = axios.create({ baseURL: "/api" });
 
 api.interceptors.request.use((config) => {
-  if (typeof window !== "undefined") {
-    const token = localStorage.getItem("token");
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
+  const token = getToken();
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
   }
   return config;
 });
@@ -19,13 +16,10 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
-      if (typeof window !== "undefined") {
-        localStorage.removeItem("token");
-        // Only redirect to /login if we aren't ALREADY on the login page
-        if (!window.location.pathname.includes("/login")) {
-          window.location.href = "/login";
-        }
+    if (error.response?.status === 401 && typeof window !== "undefined") {
+      clearSession();
+      if (!window.location.pathname.startsWith("/login")) {
+        window.location.href = "/login";
       }
     }
     return Promise.reject(error);

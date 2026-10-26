@@ -12,6 +12,7 @@ import {
   Download,
   Eye,
   Loader2,
+  Trash2,
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -19,7 +20,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -38,21 +39,10 @@ import {
 import { formatDate } from "@/lib/utils";
 import { toast } from "sonner";
 import api from "@/lib/api";
+import type { Case, Evidence } from "@/types";
 
-interface EvidenceItem {
-  id: string;
-  fileName: string;
-  fileUrl?: string;
-  fileSize: number;
-  mimeType?: string;
-  evidenceType: string;
-  tag?: string;
-  description?: string;
-  uploadedAt: string;
-  caseTitle?: string;
-  caseNumber?: string;
-  case?: { caseNumber: string; title: string };
-}
+type EvidenceItem = Evidence;
+type CaseOption = Pick<Case, "id" | "caseNumber" | "title">;
 
 const TYPE_ICONS: Record<string, any> = {
   PDF: FileText,
@@ -69,6 +59,8 @@ const TYPE_COLORS: Record<string, string> = {
   IMAGE: "bg-emerald-50 text-emerald-600",
   DOCUMENT: "bg-amber-50 text-amber-600",
 };
+
+const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
 
 function formatFileSize(bytes: number) {
   if (bytes < 1024) return bytes + " B";
@@ -88,28 +80,39 @@ export default function EvidencePage() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [previewItem, setPreviewItem] = useState<EvidenceItem | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [cases, setCases] = useState<CaseOption[]>([]);
 
   useEffect(() => {
     fetchEvidence();
+    api
+      .get("/cases")
+      .then(({ data }) => {
+        setCases(data);
+        // /evidence?caseId=... (linked from a case page) preselects the case
+        const wanted = new URLSearchParams(window.location.search).get("caseId");
+        if (wanted && data.some((c: CaseOption) => c.id === wanted)) {
+          setUploadForm((p) => ({ ...p, caseId: wanted }));
+        }
+      })
+      .catch((err) => {
+        console.error("Failed to load cases", err);
+        toast.error("Could not load your cases for the upload form.");
+      });
   }, []);
+
+  // Free the blob URL whenever the preview changes or closes.
+  useEffect(() => {
+    return () => {
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+    };
+  }, [previewUrl]);
 
   async function fetchEvidence() {
     try {
       const { data } = await api.get("/evidence");
-      const mapped = data.map((e: any) => ({
-        id: e.id,
-        fileName: e.fileName,
-        fileUrl: e.fileUrl,
-        fileSize: e.fileSize,
-        mimeType: e.mimeType,
-        evidenceType: e.evidenceType,
-        tag: e.tag,
-        description: e.description,
-        uploadedAt: e.uploadedAt,
-        caseTitle: e.case?.title,
-        caseNumber: e.case?.caseNumber,
-      }));
-      setEvidence(mapped);
+      setEvidence(data);
       setError(null);
     } catch (err) {
       console.error("Failed to load evidence", err);
@@ -125,120 +128,127 @@ export default function EvidencePage() {
   }
 
   async function handleUpload() {
+    if (!uploadForm.caseId) {
+      toast.error("Please select a case");
+      return;
+    }
     if (!selectedFile) {
       toast.error("Please select a file");
       return;
     }
+    if (selectedFile.size > MAX_UPLOAD_BYTES) {
+      toast.error("File is too large (max 25 MB)");
+      return;
+    }
     setUploading(true);
     try {
-      const ext = selectedFile.name.split(".").pop()?.toUpperCase() || "DOCUMENT";
-      const typeMap: Record<string, string> = {
-        PDF: "PDF", MP3: "AUDIO", WAV: "AUDIO", M4A: "AUDIO", OGG: "AUDIO",
-        MP4: "VIDEO", MOV: "VIDEO", AVI: "VIDEO", MKV: "VIDEO",
-        JPG: "IMAGE", JPEG: "IMAGE", PNG: "IMAGE", GIF: "IMAGE", WEBP: "IMAGE",
-      };
-      const evidenceType = typeMap[ext] || "DOCUMENT";
-
-      const reader = new FileReader();
-      const fileDataUrl = await new Promise<string>((resolve, reject) => {
-        reader.onload = () => resolve(reader.result as string);
-        reader.onerror = reject;
-        reader.readAsDataURL(selectedFile);
-      });
-
-      await api.post("/evidence", {
-        fileName: selectedFile.name,
-        fileUrl: fileDataUrl,
-        fileSize: selectedFile.size,
-        mimeType: selectedFile.type || "application/octet-stream",
-        evidenceType,
-        tag: uploadForm.tag || undefined,
-        description: uploadForm.description || undefined,
-        caseId: uploadForm.caseId || undefined,
-      });
+      const body = new FormData();
+      body.append("file", selectedFile);
+      body.append("caseId", uploadForm.caseId);
+      if (uploadForm.tag) body.append("tag", uploadForm.tag);
+      if (uploadForm.description) body.append("description", uploadForm.description);
+      await api.post("/evidence", body);
 
       toast.success("Evidence uploaded successfully");
       setUploadDialog(false);
       setSelectedFile(null);
-      setUploadForm({ tag: "", description: "", caseId: "" });
+      setUploadForm((p) => ({ ...p, tag: "", description: "" }));
       fetchEvidence();
     } catch (err: any) {
-      const msg = err.response?.data?.detail || "Upload failed. Please try again.";
-      toast.error(msg);
+      console.error("Upload failed", err);
+      toast.error(err.response?.data?.detail || "Upload failed. Please try again.");
     } finally {
       setUploading(false);
     }
   }
 
-  function handleDownload(item: EvidenceItem) {
-    if (!item.fileUrl) {
-      toast.info("This file does not have a downloadable source.");
-      return;
-    }
-    if (item.fileUrl.startsWith("data:")) {
-      const link = document.createElement("a");
-      link.href = item.fileUrl;
-      link.download = item.fileName;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-    } else {
-      const link = document.createElement("a");
-      link.href = item.fileUrl;
-      link.download = item.fileName;
-      link.target = "_blank";
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-    }
-    toast.success(`Downloading ${item.fileName}`);
+  async function fetchBlob(item: EvidenceItem, download: boolean): Promise<Blob> {
+    const { data } = await api.get(`/evidence/${item.id}/file${download ? "?download=1" : ""}`, {
+      responseType: "blob",
+    });
+    return data as Blob;
   }
 
-  function handlePreview(item: EvidenceItem) {
-    if (!item.fileUrl) {
-      toast.info("Preview not available for this file.");
-      return;
+  async function handleDownload(item: EvidenceItem) {
+    try {
+      const url = URL.createObjectURL(await fetchBlob(item, true));
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = item.fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      setTimeout(() => URL.revokeObjectURL(url), 10000);
+    } catch (err) {
+      console.error("Download failed", err);
+      toast.error("Could not download this file.");
     }
+  }
+
+  async function handlePreview(item: EvidenceItem) {
     setPreviewItem(item);
+    setPreviewUrl(null);
+    setPreviewLoading(true);
+    try {
+      setPreviewUrl(URL.createObjectURL(await fetchBlob(item, false)));
+    } catch (err) {
+      console.error("Preview failed", err);
+      toast.error("Could not load this file for preview.");
+      setPreviewItem(null);
+    } finally {
+      setPreviewLoading(false);
+    }
+  }
+
+  function closePreview() {
+    setPreviewItem(null);
+    setPreviewUrl(null);
+  }
+
+  async function handleDelete(item: EvidenceItem) {
+    if (!window.confirm(`Delete "${item.fileName}"? The file will be permanently removed.`)) return;
+    try {
+      await api.delete(`/evidence/${item.id}`);
+      toast.success("Evidence deleted");
+      setEvidence((prev) => prev.filter((e) => e.id !== item.id));
+    } catch (err: any) {
+      console.error("Delete failed", err);
+      toast.error(err.response?.data?.detail || "Failed to delete evidence");
+    }
   }
 
   function getPreviewContent(item: EvidenceItem) {
-    if (!item.fileUrl) return null;
-
-    const isImage = item.evidenceType === "IMAGE" || item.mimeType?.startsWith("image/");
-    const isVideo = item.evidenceType === "VIDEO" || item.mimeType?.startsWith("video/");
-    const isAudio = item.evidenceType === "AUDIO" || item.mimeType?.startsWith("audio/");
-    const isPdf = item.evidenceType === "PDF" || item.mimeType?.includes("pdf");
-
-    if (isImage && item.fileUrl) {
-      return <img src={item.fileUrl} alt={item.fileName} className="max-h-[60vh] mx-auto rounded-lg" />;
-    }
-    if (isVideo && item.fileUrl) {
+    if (previewLoading || !previewUrl) {
       return (
-        <video controls className="max-h-[60vh] mx-auto rounded-lg" src={item.fileUrl}>
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      );
+    }
+    if (item.evidenceType === "IMAGE") {
+      // eslint-disable-next-line @next/next/no-img-element
+      return <img src={previewUrl} alt={item.fileName} className="max-h-[60vh] mx-auto rounded-lg" />;
+    }
+    if (item.evidenceType === "VIDEO") {
+      return (
+        <video controls className="max-h-[60vh] mx-auto rounded-lg" src={previewUrl}>
           Your browser does not support video playback.
         </video>
       );
     }
-    if (isAudio && item.fileUrl) {
+    if (item.evidenceType === "AUDIO") {
       return (
         <div className="flex flex-col items-center gap-4 py-8">
           <Music className="h-16 w-16 text-blue-500" />
-          <audio controls src={item.fileUrl} className="w-full max-w-md">
+          <audio controls src={previewUrl} className="w-full max-w-md">
             Your browser does not support audio playback.
           </audio>
           <p className="text-sm text-muted-foreground">{item.fileName}</p>
         </div>
       );
     }
-    if (isPdf && item.fileUrl) {
-      return (
-        <iframe
-          src={item.fileUrl}
-          className="w-full h-[60vh] rounded-lg border"
-          title={item.fileName}
-        />
-      );
+    if (item.evidenceType === "PDF") {
+      return <iframe src={previewUrl} className="w-full h-[60vh] rounded-lg border" title={item.fileName} />;
     }
 
     return (
@@ -253,10 +263,11 @@ export default function EvidencePage() {
   }
 
   const filtered = evidence.filter((e) => {
+    const q = search.toLowerCase();
     const matchSearch =
-      e.fileName.toLowerCase().includes(search.toLowerCase()) ||
-      e.tag?.toLowerCase().includes(search.toLowerCase()) ||
-      (e.caseNumber || "").toLowerCase().includes(search.toLowerCase());
+      e.fileName.toLowerCase().includes(q) ||
+      (e.tag || "").toLowerCase().includes(q) ||
+      (e.case?.caseNumber || "").toLowerCase().includes(q);
     const matchType = typeFilter === "ALL" || e.evidenceType === typeFilter;
     return matchSearch && matchType;
   });
@@ -347,7 +358,7 @@ export default function EvidencePage() {
                         <Tag className="mr-1 h-3 w-3" />{ev.tag}
                       </Badge>
                     )}
-                    <p className="text-xs text-muted-foreground">{ev.caseNumber || "N/A"} - {ev.caseTitle || ""}</p>
+                    <p className="text-xs text-muted-foreground">{ev.case?.caseNumber || "N/A"} - {ev.case?.title || ""}</p>
                   </div>
                   <div className="flex flex-col gap-1">
                     <Button
@@ -368,6 +379,15 @@ export default function EvidencePage() {
                     >
                       <Download className="h-4 w-4" />
                     </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-destructive"
+                      onClick={() => handleDelete(ev)}
+                      title="Delete"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
                   </div>
                 </div>
               </CardContent>
@@ -381,7 +401,7 @@ export default function EvidencePage() {
         )}
       </div>
 
-      <Dialog open={!!previewItem} onOpenChange={() => setPreviewItem(null)}>
+      <Dialog open={!!previewItem} onOpenChange={(open) => { if (!open) closePreview(); }}>
         <DialogContent className="max-w-3xl">
           <DialogHeader>
             <DialogTitle>{previewItem?.fileName}</DialogTitle>
@@ -393,7 +413,7 @@ export default function EvidencePage() {
             {previewItem && getPreviewContent(previewItem)}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setPreviewItem(null)}>
+            <Button variant="outline" onClick={closePreview}>
               <X className="mr-2 h-4 w-4" /> Close
             </Button>
             {previewItem && (
@@ -413,10 +433,21 @@ export default function EvidencePage() {
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label>File</Label>
-              <input ref={fileRef} type="file" className="hidden" onChange={handleFileSelect} accept=".pdf,.mp3,.wav,.m4a,.mp4,.mov,.jpg,.jpeg,.png,.gif,.doc,.docx" />
+              <Label>Case *</Label>
+              <Select value={uploadForm.caseId} onValueChange={(v) => setUploadForm((p) => ({ ...p, caseId: v }))}>
+                <SelectTrigger><SelectValue placeholder={cases.length ? "Select a case" : "No cases yet - create a case first"} /></SelectTrigger>
+                <SelectContent>
+                  {cases.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>{c.caseNumber} - {c.title}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>File *</Label>
+              <input ref={fileRef} type="file" className="hidden" onChange={handleFileSelect} accept=".pdf,.mp3,.wav,.m4a,.ogg,.mp4,.mov,.jpg,.jpeg,.png,.gif,.webp,.doc,.docx" />
               <Button variant="outline" className="w-full" onClick={() => fileRef.current?.click()}>
-                {selectedFile ? selectedFile.name : "Choose file (PDF, Audio, Video, Image)"}
+                {selectedFile ? selectedFile.name : "Choose file (PDF, Audio, Video, Image, Word - max 25 MB)"}
               </Button>
               {selectedFile && (
                 <p className="text-xs text-muted-foreground">{formatFileSize(selectedFile.size)}</p>

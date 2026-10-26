@@ -6,7 +6,6 @@ import {
   Plus,
   Search,
   Filter,
-  MoreHorizontal,
   Eye,
   Edit,
   Trash2,
@@ -14,7 +13,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import {
   Select,
   SelectContent,
@@ -22,13 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { STAGE_LABELS, STATUS_COLORS, formatDate } from "@/lib/utils";
+import { STAGE_LABELS, formatDate } from "@/lib/utils";
 import api from "@/lib/api";
 import { toast } from "sonner";
 
