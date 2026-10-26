@@ -8,9 +8,8 @@ venv/
 env/
 
 # Environment
-.env
-.env.local
-.env.production
+.env*
+!.env.example
 
 # Next.js
 .next/
@@ -28,6 +27,10 @@ build/
 # ChromaDB
 backend/chroma_db/
 backend/data/
+
+# Uploaded evidence files
+uploads/
+frontend/uploads/
 
 # IDE
 .vscode/
